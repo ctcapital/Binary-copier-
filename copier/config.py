@@ -27,7 +27,9 @@ DEFAULTS: Dict[str, Any] = {
     "deriv_account_id": "",      # which Options account to trade (PAT API)
     "deriv_prefer_demo": True,   # pick the demo account when none is chosen
     # Trading
-    "mode": "paper",             # "paper" or "live"
+    # "live" or "paper". The UI no longer offers a switch — the app trades
+    # live. Paper remains for dry-running a parser change; see the README.
+    "mode": "live",
     "stake": 1.0,
     # Separate contracts opened per signal, each at the full stake. 3 x 50.00
     # is three independent 50.00 contracts, i.e. 150.00 at risk.
@@ -67,7 +69,7 @@ class Config:
     deriv_currency: str = "USD"
     deriv_account_id: str = ""
     deriv_prefer_demo: bool = True
-    mode: str = "paper"
+    mode: str = "live"
     stake: float = 1.0
     contracts_per_signal: int = 1
     default_duration: int = 15

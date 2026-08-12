@@ -448,31 +448,50 @@ def page_connections():
 # Trading rules
 # ---------------------------------------------------------------------------
 
+def _save_mode(mode):
+    """Save the trading mode and prove it stuck.
+
+    A silently-failing write looks exactly like a toggle that won't move: the
+    next rerun reloads the old value and the switch springs back. That happens
+    on hosts with a read-only or ephemeral filesystem, so say so plainly
+    instead of leaving you clicking at it.
+    """
+    try:
+        config.save(mode=mode)
+    except Exception as exc:
+        st.error("Could not save the setting: {}: {}".format(type(exc).__name__, exc))
+        return False
+
+    if config.load().mode != mode:
+        st.error(
+            "The setting did not persist — `{}` is not writable on this host, "
+            "so the switch springs back. This app keeps all of its state "
+            "(settings, API token, Telegram session, trade history) in a local "
+            "SQLite file and needs a writable disk. Run it on your own machine "
+            "or a VPS rather than an ephemeral hosting platform.".format(db.DB_PATH)
+        )
+        return False
+    return True
+
+
 def page_rules():
     st.title("Trading rules")
 
-    st.subheader("Mode")
-    live = st.toggle(
-        "Live trading (send real orders to Deriv)", value=CFG.is_live,
-        help="Off = paper mode: signals are parsed and priced, but no order is placed.",
-    )
-    if live != CFG.is_live:
-        if live:
-            st.warning(
-                "Switching to LIVE. Orders will be placed on account **{}**{}.".format(
-                    (ENG.status.get("account") or {}).get("loginid", "unknown"),
-                    "" if (ENG.status.get("account") or {}).get("is_virtual")
-                    else " — this is a REAL-MONEY account",
-                )
+    acct = ENG.status.get("account") or {}
+    if CFG.is_live:
+        st.error(
+            "**Live trading.** Every signal places a real order on account "
+            "**{}**{}.".format(
+                acct.get("loginid", "not connected"),
+                "" if acct.get("is_virtual") else " — a REAL-MONEY account",
             )
-            if st.button("I understand — enable live trading", type="primary"):
-                config.save(mode="live")
-                db.log("warning", "ui", "Live trading enabled")
-                st.rerun()
-        else:
-            config.save(mode="paper")
-            db.log("info", "ui", "Switched back to paper mode")
-            st.rerun()
+        )
+    else:
+        st.info(
+            "**Paper mode.** Signals are parsed and priced but no order is "
+            "placed. Re-enable live trading with:  "
+            "`./.venv/bin/python -m copier.mode live`"
+        )
 
     st.divider()
 

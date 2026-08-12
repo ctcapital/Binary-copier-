@@ -4,9 +4,14 @@ Reads trade signals from a Telegram group (`AUDCHF 15 minutes Down`) and places
 the matching Rise/Fall binary option on your Deriv account. Streamlit UI,
 local SQLite storage, no external services.
 
-**It starts in paper mode.** Signals are parsed and priced against the real
-Deriv API, but no order is sent until you deliberately switch to live trading
-on the *Trading rules* page.
+**It trades live.** Every parsed signal places a real order on the connected
+Deriv account. There is no switch in the UI — point it at a demo account until
+you trust it. Paper mode still exists for dry runs, from the command line:
+
+```bash
+./.venv/bin/python -m copier.mode paper   # parse and price, send nothing
+./.venv/bin/python -m copier.mode live    # resume trading
+```
 
 ---
 
@@ -217,14 +222,19 @@ crash. Stopping it deliberately still keeps it stopped.
 
 ---
 
-## Going live
+## Before pointing it at real money
 
-1. Run in paper mode for a while. Real signals, real pricing, no money.
-2. Check the *History* page — win rate, P/L curve, and any errors.
-3. *Trading rules* → toggle **Live trading**, confirm the warning.
+The app trades live from the moment you start the listener, so the account you
+connect is the only thing standing between a parser mistake and your balance.
 
-The sidebar shows a red **LIVE MODE** banner whenever real orders are enabled,
-along with the account id and whether it's demo or real.
+1. Connect a **demo** account token and let it run. Real signals, real orders,
+   demo funds.
+2. Check *History* — win rate, P/L curve, and any errors.
+3. Only then connect a real-money token.
+
+The sidebar always shows the account id and whether it is DEMO or REAL. To dry
+run without any orders at all, `python -m copier.mode paper`, restart, and
+watch the *Signals* tab.
 
 ---
 
