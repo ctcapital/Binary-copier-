@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Contains your Deriv API token and Telegram api_hash — never commit.
+data/
+session/
+*.session
+*.session-journal

@@ -1,0 +1,44 @@
+# systemd unit for the Telegram -> Deriv copier.
+#
+# Install:  sudo cp deploy/copier.service /etc/systemd/system/
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now copier
+#
+# NOTE the --server.address 127.0.0.1 below. The dashboard has no login of its
+# own, so it must never listen on a public interface. Reach it with an SSH
+# tunnel from your laptop:
+#
+#     ssh -N -L 8501:127.0.0.1:8501 copier@YOUR_VPS_IP
+#
+# then open http://localhost:8501 locally.
+
+[Unit]
+Description=Telegram to Deriv signal copier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=copier
+Group=copier
+WorkingDirectory=/opt/copier
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/copier/.venv/bin/streamlit run app.py \
+    --server.address 127.0.0.1 \
+    --server.port 8501 \
+    --server.headless true \
+    --browser.gatherUsageStats false
+
+# Trading must not silently stay dead after a crash or an OOM kill.
+Restart=always
+RestartSec=10
+
+# The database and Telegram session are the only things worth protecting here.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/copier/data /opt/copier/session
+
+[Install]
+WantedBy=multi-user.target
