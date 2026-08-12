@@ -33,6 +33,11 @@ def duration_to_seconds(duration: int, unit: str) -> int:
     return int(duration) * UNIT_SECONDS.get(unit, 60)
 
 
+def _of(index: int, total: int) -> str:
+    """' (2/3)' when a signal opens several contracts, blank when it's one."""
+    return "" if total <= 1 else " ({}/{})".format(index, total)
+
+
 class Engine:
     def __init__(self) -> None:
         self.loop = asyncio.new_event_loop()
@@ -426,7 +431,54 @@ class Engine:
 
         return None
 
+    def _capacity_reason(self, cfg: config.Config) -> Optional[str]:
+        """Caps that shift as contracts are opened, re-checked between each.
+
+        Without this, asking for 5 contracts would sail past a 3-open limit.
+        """
+        if cfg.max_trades_per_day:
+            if len(db.trades_since(_day_start_ts())) >= cfg.max_trades_per_day:
+                return "daily trade cap reached ({})".format(cfg.max_trades_per_day)
+        if cfg.max_concurrent_trades:
+            if len(db.open_trades()) >= cfg.max_concurrent_trades:
+                return "max concurrent trades reached ({})".format(
+                    cfg.max_concurrent_trades)
+        return None
+
     async def _execute(self, cfg: config.Config, signal_id: int, signal, deriv_symbol: str) -> None:
+        """Open the configured number of contracts for one signal.
+
+        Each is a separate contract at the full stake, placed and settled
+        independently, so a partial fill is a normal outcome rather than a
+        failure — the caps are what stop a burst from over-committing.
+        """
+        wanted = max(1, min(int(cfg.contracts_per_signal or 1), 5))
+        placed = 0
+
+        for index in range(wanted):
+            blocked = self._capacity_reason(cfg) if index else None
+            if blocked:
+                self.log("warning", "Placed {} of {} contracts for {}: {}".format(
+                    placed, wanted, deriv_symbol, blocked))
+                break
+            if not await self._place_one(cfg, signal_id, signal, deriv_symbol,
+                                         index + 1, wanted):
+                break
+            placed += 1
+
+        if placed == 0:
+            db.update_signal_status(signal_id, "error", "no contracts opened")
+        elif placed < wanted:
+            db.update_signal_status(
+                signal_id, "executed", "{} of {} contracts".format(placed, wanted))
+        else:
+            db.update_signal_status(signal_id, "executed")
+
+    async def _place_one(
+        self, cfg: config.Config, signal_id: int, signal, deriv_symbol: str,
+        index: int, total: int,
+    ) -> bool:
+        """Open a single contract. Returns False if it failed."""
         trade_id = db.insert_trade(
             signal_id=signal_id,
             mode=cfg.mode,
@@ -459,10 +511,10 @@ class Engine:
                     longcode=result["longcode"],
                     status="open",
                 )
-                db.update_signal_status(signal_id, "executed")
-                self.log("info", "LIVE bought {} {} {}{} stake {:.2f} -> contract {}".format(
-                    deriv_symbol, signal.direction, signal.duration,
-                    signal.duration_unit, cfg.stake, result["contract_id"]))
+                self.log("info", "LIVE bought {}{} {} {}{} stake {:.2f} -> contract {}".format(
+                    deriv_symbol, _of(index, total), direction_label(signal.direction),
+                    signal.duration, signal.duration_unit, cfg.stake,
+                    result["contract_id"]))
             else:
                 # Paper: price it for real (free) so invalid contracts still
                 # fail here, then track the spot to settle it honestly.
@@ -482,15 +534,17 @@ class Engine:
                     entry_spot=entry,
                     status="open",
                 )
-                db.update_signal_status(signal_id, "executed")
-                self.log("info", "PAPER {} {} {}{} stake {:.2f} entry {}".format(
-                    deriv_symbol, signal.direction, signal.duration,
-                    signal.duration_unit, cfg.stake, entry))
+                self.log("info", "PAPER {}{} {} {}{} stake {:.2f} entry {}".format(
+                    deriv_symbol, _of(index, total), direction_label(signal.direction),
+                    signal.duration, signal.duration_unit, cfg.stake, entry))
 
         except (DerivError, ConnectionError, TimeoutError, RuntimeError) as exc:
             db.update_trade(trade_id, status="error", error=str(exc))
-            db.update_signal_status(signal_id, "error", str(exc))
-            self.log("error", "Execution failed for {}: {}".format(deriv_symbol, exc))
+            self.log("error", "Execution failed for {}{}: {}".format(
+                deriv_symbol, _of(index, total), exc))
+            return False
+
+        return True
 
     # ------------------------------------------------------------------
     # settlement

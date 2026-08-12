@@ -110,9 +110,12 @@ def page_dashboard():
             st.rerun()
     with col3:
         st.caption("Group: **{}**".format(CFG.tg_chat_title or "not selected"))
-        st.caption("Stake **{:.2f} {}** · default expiry **{}{}** · mode **{}**".format(
-            CFG.stake, CFG.deriv_currency, CFG.default_duration,
-            CFG.default_duration_unit, CFG.mode.upper()))
+        st.caption("Stake **{:.2f} {}**{} · default expiry **{}{}** · mode **{}**".format(
+            CFG.stake, CFG.deriv_currency,
+            " × **{} contracts** = **{:.2f}**/signal".format(
+                CFG.contracts_per_signal, CFG.stake * CFG.contracts_per_signal)
+            if CFG.contracts_per_signal > 1 else "",
+            CFG.default_duration, CFG.default_duration_unit, CFG.mode.upper()))
 
     auto = st.checkbox(
         "Auto-resume the listener when the app restarts", value=CFG.auto_resume,
@@ -479,10 +482,33 @@ def page_rules():
         stake = c1.number_input(
             "Stake ({})".format(CFG.deriv_currency), min_value=0.35,
             value=float(CFG.stake), step=0.5, format="%.2f",
-            help="Same amount on every trade. Deriv's minimum is usually 0.35 USD.",
+            help="Amount per contract. Deriv's minimum is usually 0.35 USD.",
         )
-        c2.caption("Currency comes from the connected Deriv account: **{}**".format(
-            CFG.deriv_currency))
+        contracts = c2.number_input(
+            "Contracts per signal", min_value=1, max_value=5,
+            value=int(CFG.contracts_per_signal), step=1,
+            help="Open this many separate contracts on the same asset for each "
+                 "signal, each at the full stake. They are priced, filled and "
+                 "settled independently, and each one counts towards your daily "
+                 "and open-trade limits.",
+        )
+        st.caption(
+            "Currency comes from the connected Deriv account: **{}** — "
+            "**{:.2f} {} at risk per signal** ({} × {:.2f})".format(
+                CFG.deriv_currency, stake * contracts, CFG.deriv_currency,
+                contracts, stake)
+        )
+        if contracts > 1 and CFG.max_concurrent_trades:
+            signals_at_once = CFG.max_concurrent_trades // contracts
+            if signals_at_once < 1:
+                st.warning(
+                    "**Max open trades ({}) is below {} contracts**, so every "
+                    "signal will be cut short. Raise it to at least {}.".format(
+                        CFG.max_concurrent_trades, contracts, contracts))
+            else:
+                st.caption("Max open trades ({}) allows about {} signal(s) "
+                           "running at once.".format(
+                               CFG.max_concurrent_trades, signals_at_once))
 
         st.subheader("Expiry")
         st.caption("Each signal's own duration is used. These apply when a message "
@@ -520,6 +546,7 @@ def page_rules():
         if st.form_submit_button("Save rules", type="primary"):
             config.save(
                 stake=float(stake),
+                contracts_per_signal=int(contracts),
                 default_duration=int(default_duration),
                 default_duration_unit=default_unit,
                 min_duration_minutes=int(min_minutes),

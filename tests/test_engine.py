@@ -84,6 +84,7 @@ def reset_settings(**overrides):
         "max_concurrent_trades": 3, "max_signal_age_seconds": 90,
         "min_duration_minutes": 1, "max_duration_minutes": 240,
         "default_duration": 15, "default_duration_unit": "m",
+        "contracts_per_signal": 1,
     }
     base.update(overrides)
     config.save(**base)
@@ -283,7 +284,53 @@ def main():
               "traded the signal, not the result post")
 
     # ---------------------------------------------------------------
-    print("\n[15] unknown pair never reaches Deriv")
+    print("\n[15] multiple contracts per signal")
+    clear_tables()
+    reset_settings(mode="live", stake=50.0, contracts_per_signal=3,
+                   max_concurrent_trades=99, max_trades_per_day=0)
+    fake.buys.clear()
+    handle(FakeMessage(1000, "AUDCHF 15 minutes Down"))
+    trades = db.recent_trades()
+    check(len(trades) == 3, "3 separate contracts opened ({})".format(len(trades)))
+    check(len(fake.buys) == 3, "3 buy orders sent to Deriv")
+    check(all(t["stake"] == 50.0 for t in trades), "each at the full 50.00 stake")
+    check(sum(t["stake"] for t in trades) == 150.0, "150.00 total at risk")
+    check(len({t["contract_id"] for t in trades}) == 3, "3 distinct contract ids")
+    check(db.recent_signals()[0]["status"] == "executed", "signal marked executed")
+
+    print("\n[16] contracts still respect the open-trade cap")
+    clear_tables()
+    reset_settings(mode="live", stake=50.0, contracts_per_signal=5,
+                   max_concurrent_trades=2, max_trades_per_day=0)
+    fake.buys.clear()
+    handle(FakeMessage(1001, "AUDCHF 15 minutes Down"))
+    check(len(db.recent_trades()) == 2,
+          "asked for 5, capped at 2 open ({})".format(len(db.recent_trades())))
+    sig = db.recent_signals()[0]
+    check(sig["status"] == "executed" and "2 of 5" in (sig["reason"] or ""),
+          "partial fill recorded as '2 of 5' (got {!r})".format(sig["reason"]))
+
+    print("\n[17] contracts count against the daily cap")
+    clear_tables()
+    reset_settings(mode="live", stake=50.0, contracts_per_signal=3,
+                   max_concurrent_trades=99, max_trades_per_day=4)
+    fake.buys.clear()
+    handle(FakeMessage(1002, "AUDCHF 15 minutes Down"))   # 3 contracts
+    handle(FakeMessage(1003, "EURGBP 15 minutes Up"))     # only 1 left
+    check(len(db.recent_trades()) == 4,
+          "stopped at the 4-trade daily cap ({})".format(len(db.recent_trades())))
+
+    print("\n[18] paper mode opens multiple contracts too")
+    clear_tables()
+    reset_settings(mode="paper", stake=10.0, contracts_per_signal=2,
+                   max_concurrent_trades=99, max_trades_per_day=0)
+    fake.buys.clear()
+    handle(FakeMessage(1004, "AUDCHF 15 minutes Down"))
+    check(len(db.recent_trades()) == 2, "2 paper contracts")
+    check(len(fake.buys) == 0, "no live buys in paper mode")
+
+    # ---------------------------------------------------------------
+    print("\n[19] unknown pair never reaches Deriv")
     clear_tables()
     reset_settings(max_concurrent_trades=99, max_trades_per_day=0)
     fake.buys.clear()

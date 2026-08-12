@@ -29,6 +29,9 @@ DEFAULTS: Dict[str, Any] = {
     # Trading
     "mode": "paper",             # "paper" or "live"
     "stake": 1.0,
+    # Separate contracts opened per signal, each at the full stake. 3 x 50.00
+    # is three independent 50.00 contracts, i.e. 150.00 at risk.
+    "contracts_per_signal": 1,
     "default_duration": 15,
     "default_duration_unit": "m",
     "min_duration_minutes": 1,
@@ -66,6 +69,7 @@ class Config:
     deriv_prefer_demo: bool = True
     mode: str = "paper"
     stake: float = 1.0
+    contracts_per_signal: int = 1
     default_duration: int = 15
     default_duration_unit: str = "m"
     min_duration_minutes: int = 1

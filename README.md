@@ -188,12 +188,26 @@ All on the *Trading rules* page. They're checked before every order.
 
 | Setting | Default | Does |
 |---|---|---|
-| Stake | 1.00 | Fixed amount per trade |
+| Stake | 1.00 | Fixed amount per **contract** |
+| Contracts per signal | 1 | Opens 1–5 separate contracts on the asset, each at the full stake |
 | Min / max expiry | 1m / 240m | Rejects durations outside the band |
 | Max trades per day | 20 | Counts from UTC midnight; 0 = unlimited |
 | Max daily loss | 50.00 | Once today's P/L drops below this, new signals are skipped |
 | Max open trades | 3 | Caps simultaneous exposure |
 | Ignore signals older than | 90s | Stops old messages being replayed after a reconnect |
+
+### Contracts per signal
+
+Set it above 1 and each signal opens that many independent contracts on the
+same asset, each staking the full amount — `3 × 50.00` puts **150.00** at risk
+per signal, not 50.00 split three ways. They are priced, filled and settled
+separately, so they can return different payouts.
+
+Each contract counts as one trade against **max trades per day** and **max open
+trades**. If a cap is reached partway, the remaining contracts are dropped and
+the signal is recorded as e.g. *"2 of 5 contracts"* rather than failing. Keep
+**max open trades** at least as large as this setting, or every signal will be
+cut short.
 
 By default the listener never starts itself: after a restart you press **Start
 listener** again, so nothing resumes live trading unattended. On an always-on
