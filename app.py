@@ -15,7 +15,7 @@ import streamlit as st
 # credentials can come from, since nothing written to SQLite survives a restart.
 try:
     for _key in ("DERIV_TOKEN", "DERIV_APP_ID", "DERIV_ACCOUNT_ID",
-                 "TG_API_ID", "TG_API_HASH", "TG_CHAT_ID", "TG_CHAT_TITLE",
+                 "TG_API_ID", "TG_API_HASH", "TG_CHAT_ID", "TG_CHAT_TITLE", "MODE",
                  "TG_SESSION_STRING"):
         if _key in st.secrets and _key not in os.environ:
             os.environ[_key] = str(st.secrets[_key])
@@ -624,7 +624,27 @@ def page_rules():
             parsed.pair, parsed.direction, parsed.duration, parsed.duration_unit
         ), timeout=90)
         if result:
-            st.success("Submitted on {} — see the Dashboard.".format(result))
+            placed, wanted = result["placed"], result["wanted"]
+            if placed == 0:
+                # Execution records failures rather than raising, so this has
+                # to be checked — reporting success regardless is how an order
+                # that never reached Deriv looked like it had worked.
+                st.error("**No order was placed.** {}".format(
+                    result.get("error") or "Deriv rejected the trade."))
+            elif result["mode"] != "live":
+                st.warning(
+                    "**Paper mode** — {} contract(s) recorded on {}, but "
+                    "nothing was sent to Deriv, so this will not appear in "
+                    "your account. Switch with "
+                    "`python -m copier.mode live`.".format(placed, result["symbol"]))
+            else:
+                ids = ", ".join(result["contract_ids"]) or "see the Dashboard"
+                message = "Placed {} contract(s) on {} — contract {}".format(
+                    placed, result["symbol"], ids)
+                if placed < wanted:
+                    message += "  ({} of {} — {})".format(
+                        placed, wanted, result.get("error") or "capacity reached")
+                st.success(message)
 
 
 # ---------------------------------------------------------------------------

@@ -451,40 +451,61 @@ class Engine:
                     cfg.max_concurrent_trades)
         return None
 
-    async def _execute(self, cfg: config.Config, signal_id: int, signal, deriv_symbol: str) -> None:
+    async def _execute(
+        self, cfg: config.Config, signal_id: int, signal, deriv_symbol: str
+    ) -> Dict[str, Any]:
         """Open the configured number of contracts for one signal.
 
         Each is a separate contract at the full stake, placed and settled
         independently, so a partial fill is a normal outcome rather than a
         failure — the caps are what stop a burst from over-committing.
+
+        Returns a summary so callers can report what actually happened. A
+        failure here is recorded rather than raised, so anything reporting
+        to a user must check `placed` instead of assuming success.
         """
         wanted = max(1, min(int(cfg.contracts_per_signal or 1), 5))
-        placed = 0
+        result = {
+            "symbol": deriv_symbol, "wanted": wanted, "placed": 0,
+            "mode": cfg.mode, "error": None, "contract_ids": [],
+        }
 
         for index in range(wanted):
             blocked = self._capacity_reason(cfg) if index else None
             if blocked:
+                result["error"] = blocked
                 self.log("warning", "Placed {} of {} contracts for {}: {}".format(
-                    placed, wanted, deriv_symbol, blocked))
+                    result["placed"], wanted, deriv_symbol, blocked))
                 break
-            if not await self._place_one(cfg, signal_id, signal, deriv_symbol,
-                                         index + 1, wanted):
-                break
-            placed += 1
 
+            failure = await self._place_one(cfg, signal_id, signal, deriv_symbol,
+                                            index + 1, wanted)
+            if failure:
+                result["error"] = failure
+                break
+            result["placed"] += 1
+
+        placed = result["placed"]
         if placed == 0:
-            db.update_signal_status(signal_id, "error", "no contracts opened")
+            db.update_signal_status(
+                signal_id, "error", result["error"] or "no contracts opened")
         elif placed < wanted:
             db.update_signal_status(
                 signal_id, "executed", "{} of {} contracts".format(placed, wanted))
         else:
             db.update_signal_status(signal_id, "executed")
 
+        result["contract_ids"] = [
+            row["contract_id"] for row in db.recent_trades(placed)
+            if row["signal_id"] == signal_id and row["contract_id"]
+        ]
+        return result
+
     async def _place_one(
         self, cfg: config.Config, signal_id: int, signal, deriv_symbol: str,
         index: int, total: int,
-    ) -> bool:
-        """Open a single contract. Returns False if it failed."""
+    ) -> Optional[str]:
+        """Open a single contract. Returns None on success, else the reason."""
         trade_id = db.insert_trade(
             signal_id=signal_id,
             mode=cfg.mode,
@@ -548,9 +569,9 @@ class Engine:
             db.update_trade(trade_id, status="error", error=str(exc))
             self.log("error", "Execution failed for {}{}: {}".format(
                 deriv_symbol, _of(index, total), exc))
-            return False
+            return str(exc)
 
-        return True
+        return None
 
     # ------------------------------------------------------------------
     # settlement
@@ -636,7 +657,9 @@ class Engine:
     # manual test order
     # ------------------------------------------------------------------
 
-    async def test_trade(self, pair: str, direction: str, duration: int, unit: str) -> str:
+    async def test_trade(
+        self, pair: str, direction: str, duration: int, unit: str
+    ) -> Dict[str, Any]:
         """Place one trade by hand, honouring the current paper/live mode."""
         cfg = config.load()
         deriv_symbol = symbols.resolve(pair)
@@ -656,8 +679,7 @@ class Engine:
         sig.pair, sig.direction = pair, direction
         sig.duration, sig.duration_unit = duration, unit
 
-        await self._execute(cfg, signal_id, sig, deriv_symbol)
-        return deriv_symbol
+        return await self._execute(cfg, signal_id, sig, deriv_symbol)
 
 
 _engine_lock = threading.Lock()

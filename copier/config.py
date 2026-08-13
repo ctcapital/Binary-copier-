@@ -61,10 +61,11 @@ _SECRET_ENV = {
     "tg_api_hash": "TG_API_HASH",
     "tg_chat_id": "TG_CHAT_ID",
     "tg_chat_title": "TG_CHAT_TITLE",
+    "mode": "MODE",
 }
 
 # A Telethon StringSession, for hosts where session/copier.session cannot
-# persist. Generate one with tools/make_session.py.
+# persist. Generate one with tools/make_secrets.py.
 SESSION_STRING_ENV = "TG_SESSION_STRING"
 
 

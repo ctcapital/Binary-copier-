@@ -330,7 +330,36 @@ def main():
     check(len(fake.buys) == 0, "no live buys in paper mode")
 
     # ---------------------------------------------------------------
-    print("\n[19] unknown pair never reaches Deriv")
+    print("\n[19] a failed order reports failure, not success")
+    clear_tables()
+    reset_settings(mode="live", stake=10.0, max_concurrent_trades=99,
+                   max_trades_per_day=0)
+    fake.fail_with = DerivError("MarketIsClosed", "This market is presently closed.")
+    res = eng.submit(eng.test_trade("AUDCHF", "PUT", 15, "m"), timeout=30)
+    check(res["placed"] == 0, "placed == 0 so the UI cannot claim success")
+    check("closed" in (res["error"] or ""), "the reason is returned to the caller")
+    fake.fail_with = None
+
+    print("\n[20] a successful order reports what was opened")
+    clear_tables()
+    fake.buys.clear()
+    res = eng.submit(eng.test_trade("AUDCHF", "PUT", 15, "m"), timeout=30)
+    check(res["placed"] == 1 and res["error"] is None, "placed == 1, no error")
+    check(res["mode"] == "live", "mode reported so paper cannot look live")
+    check(len(res["contract_ids"]) == 1, "contract id returned for cross-checking")
+
+    print("\n[21] paper mode is reported as paper")
+    clear_tables()
+    reset_settings(mode="paper", stake=10.0, max_concurrent_trades=99,
+                   max_trades_per_day=0)
+    fake.buys.clear()
+    res = eng.submit(eng.test_trade("AUDCHF", "PUT", 15, "m"), timeout=30)
+    check(res["placed"] == 1 and res["mode"] == "paper",
+          "recorded but flagged paper")
+    check(len(fake.buys) == 0, "nothing sent to Deriv")
+
+    # ---------------------------------------------------------------
+    print("\n[22] unknown pair never reaches Deriv")
     clear_tables()
     reset_settings(max_concurrent_trades=99, max_trades_per_day=0)
     fake.buys.clear()
