@@ -253,6 +253,26 @@ class Engine:
         self.log("info", "Telegram 2FA sign-in complete")
         return "authorized"
 
+    async def export_session_string(self) -> str:
+        """Serialise this instance's own login so it survives a restart.
+
+        On a host with no persistent disk the signed-in session is lost every
+        time the process restarts. Saving this string back into the host's
+        secrets lets the same instance resume its own login.
+
+        This is the same key, not a second one — safe to reuse *here*, but
+        running it anywhere else at the same time makes Telegram cancel both.
+        """
+        client = await self._tg_client()
+        if not await client.is_user_authorized():
+            raise RuntimeError("Not signed in — complete the login first")
+
+        portable = StringSession()
+        portable.set_dc(client.session.dc_id, client.session.server_address,
+                        client.session.port)
+        portable.auth_key = client.session.auth_key
+        return portable.save()
+
     async def tg_logout(self) -> None:
         if self.tg is not None:
             await self.stop_listening()

@@ -316,6 +316,26 @@ def page_connections():
             )
         if status.get("authorized"):
             st.success("Signed in as {}".format(status.get("user", "?")))
+
+            with st.expander("Keep this login across restarts (hosted apps)"):
+                st.caption(
+                    "A host with no persistent disk loses the login every time "
+                    "the app restarts. Save this string as the "
+                    "`TG_SESSION_STRING` secret and this instance resumes its "
+                    "own session instead of asking for a code again."
+                )
+                if st.button("Show session string"):
+                    exported = run(ENG.export_session_string(), timeout=30)
+                    if exported:
+                        st.code(exported, language=None)
+                        st.warning(
+                            "**This is a login credential for your Telegram "
+                            "account.** Paste it only into this host's secrets. "
+                            "Do not run a second copy of the app with it — "
+                            "Telegram cancels a key used from two places at "
+                            "once, and cancels both."
+                        )
+
             if st.button("Log out of Telegram"):
                 run(ENG.tg_logout())
                 st.rerun()
