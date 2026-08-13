@@ -248,6 +248,17 @@ def _day_start():
 def page_connections():
     st.title("Connections")
 
+    locked = config.overridden()
+    if locked:
+        st.info(
+            "**{} setting(s) are coming from secrets, not the database:** {}.\n\n"
+            "Environment values win, so editing them below will appear to save "
+            "but change nothing. Edit `.streamlit/secrets.toml` (or your host's "
+            "secrets store) instead — or delete that file to go back to the "
+            "database.".format(len(locked), ", ".join("`{}`".format(env)
+                                                      for env in sorted(locked.values())))
+        )
+
     tab_tg, tab_deriv = st.tabs(["Telegram", "Deriv"])
 
     # ---------------- Telegram ----------------

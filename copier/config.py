@@ -72,6 +72,21 @@ def session_string() -> str:
     return os.environ.get(SESSION_STRING_ENV, "").strip()
 
 
+def overridden() -> Dict[str, str]:
+    """Settings currently coming from the environment rather than the database.
+
+    Worth surfacing: an override silently wins over anything typed into the
+    UI, so a saved change would appear to do nothing.
+    """
+    out = {}
+    for key, env_name in _SECRET_ENV.items():
+        if os.environ.get(env_name):
+            out[key] = env_name
+    if os.environ.get(SESSION_STRING_ENV):
+        out["tg_session"] = SESSION_STRING_ENV
+    return out
+
+
 @dataclass
 class Config:
     tg_api_id: str = ""
