@@ -271,6 +271,62 @@ Secrets live in the `settings` table of `data/copier.db`, which is created
 
 ---
 
+## Running on Streamlit Community Cloud
+
+The deployed app clones the repo, and the repo deliberately contains no
+`data/` or `session/` directory — so it starts with no Deriv token and no
+Telegram login. Credentials have to arrive as **secrets** instead.
+
+### Be clear about what this gets you
+
+| Works | Doesn't |
+|---|---|
+| Dashboard reachable from anywhere | Listener stops when the app sleeps |
+| Connects to Deriv, shows balance | Trade history wiped on every restart |
+| Manual trades via *Try a signal* | **Dedupe state wiped — a replayed message can trade twice** |
+| Reads the group, parses signals | Guard-rail counters (daily cap, loss limit) reset with it |
+
+Streamlit Cloud suspends idle apps and gives each one an ephemeral disk. It
+suits a dashboard you open occasionally; it cannot be relied on to copy
+signals unattended. For that, use a VPS.
+
+### 1. Generate a session string
+
+`session/copier.session` cannot persist there, so export the login:
+
+```bash
+./.venv/bin/python tools/make_session.py
+```
+
+It reuses your existing local login and prints a `TG_SESSION_STRING`.
+**That string is a login credential for your Telegram account** — treat it
+like a password, and revoke it from Telegram → Settings → Devices if it leaks.
+
+### 2. Add the secrets
+
+App → **⋮ → Settings → Secrets**, in TOML:
+
+```toml
+DERIV_TOKEN       = "pat_…"
+DERIV_APP_ID      = "your-registered-app-id"
+DERIV_ACCOUNT_ID  = "DOT…"          # which Options account to trade
+TG_API_ID         = "1234567"
+TG_API_HASH       = "…"
+TG_CHAT_ID        = "-100…"         # from the group picker locally
+TG_CHAT_TITLE     = "AI signal / VIP"
+TG_SESSION_STRING = "…"
+```
+
+Environment variables of the same names work identically anywhere else.
+Anything supplied this way overrides the database, so the app configures
+itself on a disk it cannot write to.
+
+### 3. Restart the app
+
+Streamlit reboots it when secrets are saved. The sidebar should show your
+Deriv account; press **Start listener** — and remember it stops again when the
+app sleeps.
+
 ## Running on a VPS
 
 A laptop sleeps, changes network and reboots for updates, so signals get

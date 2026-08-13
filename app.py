@@ -4,10 +4,23 @@ Run with:  ./.venv/bin/streamlit run app.py
 """
 
 import datetime as dt
+import os
 import time
 
 import pandas as pd
 import streamlit as st
+
+# Bridge Streamlit's secrets store into the environment before anything reads
+# configuration. On a host with no persistent disk this is the only place the
+# credentials can come from, since nothing written to SQLite survives a restart.
+try:
+    for _key in ("DERIV_TOKEN", "DERIV_APP_ID", "DERIV_ACCOUNT_ID",
+                 "TG_API_ID", "TG_API_HASH", "TG_CHAT_ID", "TG_CHAT_TITLE",
+                 "TG_SESSION_STRING"):
+        if _key in st.secrets and _key not in os.environ:
+            os.environ[_key] = str(st.secrets[_key])
+except Exception:
+    pass  # no secrets.toml configured — normal for a local run
 
 from copier import config, db, deriv_rest, symbols
 from copier.deriv import token_warning

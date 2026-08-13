@@ -7,3 +7,7 @@ data/
 session/
 *.session
 *.session-journal
+
+# Streamlit secrets — never commit credentials
+.streamlit/secrets.toml
+secrets.toml

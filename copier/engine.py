@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
+from telethon.sessions import StringSession
 
 from . import config, db, symbols
 from .deriv import DerivClient, DerivError
@@ -173,8 +174,13 @@ class Engine:
         if not cfg.tg_api_id or not cfg.tg_api_hash:
             raise RuntimeError("Telegram api_id / api_hash not configured")
         if self.tg is None:
+            # A StringSession keeps the login in an env var rather than on
+            # disk, which is the only way to stay signed in on a host with no
+            # persistent filesystem.
+            stored = config.session_string()
+            session = StringSession(stored) if stored else config.ensure_session_dir()
             self.tg = TelegramClient(
-                config.ensure_session_dir(), int(cfg.tg_api_id), cfg.tg_api_hash
+                session, int(cfg.tg_api_id), cfg.tg_api_hash
             )
         if not self.tg.is_connected():
             await self.tg.connect()

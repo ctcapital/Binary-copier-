@@ -50,11 +50,26 @@ DEFAULTS: Dict[str, Any] = {
     "auto_resume": False,
 }
 
+# Settings that can be supplied by the environment instead of the database.
+# On a host with no persistent disk (Streamlit Cloud and friends) these are the
+# only way to configure the app, since nothing written to SQLite survives.
 _SECRET_ENV = {
     "deriv_token": "DERIV_TOKEN",
+    "deriv_app_id": "DERIV_APP_ID",
+    "deriv_account_id": "DERIV_ACCOUNT_ID",
     "tg_api_id": "TG_API_ID",
     "tg_api_hash": "TG_API_HASH",
+    "tg_chat_id": "TG_CHAT_ID",
+    "tg_chat_title": "TG_CHAT_TITLE",
 }
+
+# A Telethon StringSession, for hosts where session/copier.session cannot
+# persist. Generate one with tools/make_session.py.
+SESSION_STRING_ENV = "TG_SESSION_STRING"
+
+
+def session_string() -> str:
+    return os.environ.get(SESSION_STRING_ENV, "").strip()
 
 
 @dataclass
