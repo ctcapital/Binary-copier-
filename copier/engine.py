@@ -59,6 +59,9 @@ class Engine:
         self._handler = None
         self._settle_task = None
         self._phone_code_hash: Optional[str] = None
+        # Set when a stored session turned out to be cancelled and was
+        # discarded, so the UI can explain why a re-login is needed.
+        self.session_reset = False
 
         self.status: Dict[str, Any] = {
             "tg_connected": False,
@@ -184,12 +187,40 @@ class Engine:
             # disk, which is the only way to stay signed in on a host with no
             # persistent filesystem.
             stored = config.session_string()
-            session = StringSession(stored) if stored else config.ensure_session_dir()
+            session = config.ensure_session_dir()
+            if stored:
+                try:
+                    session = StringSession(stored)
+                except Exception as exc:
+                    # A truncated or corrupted secret must not wedge the app —
+                    # fall back to a blank session so sign-in still works.
+                    self.session_reset = True
+                    self.log("warning",
+                             "TG_SESSION_STRING could not be read ({}), "
+                             "starting a fresh session.".format(exc))
+                    session = StringSession()
             self.tg = TelegramClient(
                 session, int(cfg.tg_api_id), cfg.tg_api_hash
             )
+
         if not self.tg.is_connected():
-            await self.tg.connect()
+            try:
+                await self.tg.connect()
+            except AuthKeyDuplicatedError:
+                # A cancelled key would otherwise block sign-in forever: the
+                # stored session can't be edited from in here, and every
+                # connection attempt fails on it. Drop it and start clean so
+                # the login flow can run.
+                self.session_reset = True
+                self.log("warning",
+                         "Stored Telegram session was cancelled by Telegram "
+                         "(used from two places at once) — starting a fresh "
+                         "one so you can sign in again.")
+                self.tg = TelegramClient(
+                    StringSession(), int(cfg.tg_api_id), cfg.tg_api_hash
+                )
+                await self.tg.connect()
+
         self.status["tg_connected"] = True
         return self.tg
 

@@ -302,6 +302,16 @@ def page_connections():
 
         st.subheader("2. Sign in")
         status = run(ENG.tg_status(), timeout=30) or {}
+
+        if getattr(ENG, "session_reset", False) and not status.get("authorized"):
+            st.warning(
+                "**The saved Telegram session was cancelled** — it had been "
+                "used from two machines at once, which Telegram does not "
+                "allow. It has been discarded so you can sign in again below.\n\n"
+                "Once signed in, open *Keep this login across restarts* and "
+                "save the new string over the old `TG_SESSION_STRING` secret, "
+                "otherwise the dead one comes back on the next restart."
+            )
         if status.get("duplicated"):
             st.error(
                 "**Telegram cancelled this login.** {}\n\n"
