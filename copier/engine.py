@@ -40,6 +40,12 @@ def _of(index: int, total: int) -> str:
 
 
 class Engine:
+    # Bumped whenever the interface the UI depends on changes. Streamlit can
+    # reload app.py without restarting the process, leaving a cached Engine
+    # from the previous build in place; the UI compares this and says so
+    # rather than failing with an unreadable TypeError.
+    API_VERSION = 2
+
     def __init__(self) -> None:
         self.loop = asyncio.new_event_loop()
         self._thread = threading.Thread(

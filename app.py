@@ -38,6 +38,12 @@ def engine():
 ENG = engine()
 CFG = config.load()
 
+# The UI and the engine must come from the same build. Streamlit reloads the
+# script on every interaction but keeps cached resources, so after a deploy the
+# new page can end up talking to the previous engine.
+EXPECTED_ENGINE_API = 2
+STALE_ENGINE = getattr(ENG, "API_VERSION", 0) != EXPECTED_ENGINE_API
+
 
 def ts(value):
     if not value:
@@ -62,6 +68,16 @@ def run(coro, timeout=90.0):
 # ---------------------------------------------------------------------------
 
 st.sidebar.title("📈 Signal Copier")
+
+if STALE_ENGINE:
+    st.sidebar.error("Restart required — stale engine")
+    st.error(
+        "**This page is newer than the running engine.** The app was updated "
+        "without the process being restarted, so the two no longer match and "
+        "trading actions may misreport what happened.\n\n"
+        "**Restart it now** — on Streamlit Cloud: *Manage app → Reboot*. "
+        "Locally: stop the process and start it again."
+    )
 
 account = ENG.status.get("account") or {}
 if account:
@@ -623,7 +639,18 @@ def page_rules():
         result = run(ENG.test_trade(
             parsed.pair, parsed.direction, parsed.duration, parsed.duration_unit
         ), timeout=90)
-        if result:
+        if result is not None and not isinstance(result, dict):
+            # A cached engine from an older build still returns a bare symbol.
+            # Streamlit can reload the source without restarting the process,
+            # which leaves st.cache_resource holding the previous object.
+            st.warning(
+                "The app is running new code against a cached engine from an "
+                "older build, so the result can't be read. **Restart it** — on "
+                "Streamlit Cloud use *Manage app → Reboot*; locally stop and "
+                "start the process. The trade may still have been placed: "
+                "check the Dashboard and your Deriv account before retrying."
+            )
+        elif result:
             placed, wanted = result["placed"], result["wanted"]
             if placed == 0:
                 # Execution records failures rather than raising, so this has
