@@ -295,16 +295,21 @@ signals unattended. For that, use a VPS.
 `session/copier.session` cannot persist there, so export the login:
 
 ```bash
-./.venv/bin/python tools/make_session.py
+./.venv/bin/python tools/make_secrets.py
 ```
 
-It reuses your existing local login and prints a `TG_SESSION_STRING`.
-**That string is a login credential for your Telegram account** — treat it
-like a password, and revoke it from Telegram → Settings → Devices if it leaks.
+This collects everything already working locally — Deriv token, app id,
+account, Telegram credentials and chat — and exports your existing login as a
+portable session string. Nothing is re-authorised and no secret is printed to
+the terminal; it writes `.streamlit/secrets.toml` (mode 0600, gitignored).
+
+**`TG_SESSION_STRING` is a login credential for your Telegram account.** Treat
+it like a password; revoke it from Telegram → Settings → Devices if it leaks.
 
 ### 2. Add the secrets
 
-App → **⋮ → Settings → Secrets**, in TOML:
+Open `.streamlit/secrets.toml`, copy all of it, and paste into
+App → **⋮ → Settings → Secrets**. It looks like:
 
 ```toml
 DERIV_TOKEN       = "pat_…"
@@ -312,10 +317,12 @@ DERIV_APP_ID      = "your-registered-app-id"
 DERIV_ACCOUNT_ID  = "DOT…"          # which Options account to trade
 TG_API_ID         = "1234567"
 TG_API_HASH       = "…"
-TG_CHAT_ID        = "-100…"         # from the group picker locally
+TG_CHAT_ID        = "-100…"
 TG_CHAT_TITLE     = "AI signal / VIP"
 TG_SESSION_STRING = "…"
 ```
+
+The same file also configures a local run, so you can test it before deploying.
 
 Environment variables of the same names work identically anywhere else.
 Anything supplied this way overrides the database, so the app configures
