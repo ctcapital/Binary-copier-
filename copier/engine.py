@@ -13,7 +13,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from telethon import TelegramClient, events
-from telethon.errors import SessionPasswordNeededError
+from telethon.errors import AuthKeyDuplicatedError, SessionPasswordNeededError
 from telethon.sessions import StringSession
 
 from . import config, db, symbols
@@ -196,6 +196,20 @@ class Engine:
     async def tg_status(self) -> Dict[str, Any]:
         try:
             client = await self._tg_client()
+        except AuthKeyDuplicatedError:
+            # Telegram kills a key used from two IPs at once — and kills both
+            # copies, so the other instance is broken too.
+            self.tg = None
+            self.status["tg_connected"] = False
+            self.status["tg_authorized"] = False
+            return {
+                "connected": False, "authorized": False,
+                "duplicated": True,
+                "error": "This Telegram login was used from two machines at "
+                         "once, so Telegram cancelled it. Both copies are now "
+                         "dead. Sign in again here, and give every other "
+                         "instance its own separate login.",
+            }
         except Exception as exc:
             self.status["tg_connected"] = False
             self.status["tg_authorized"] = False

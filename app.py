@@ -302,6 +302,18 @@ def page_connections():
 
         st.subheader("2. Sign in")
         status = run(ENG.tg_status(), timeout=30) or {}
+        if status.get("duplicated"):
+            st.error(
+                "**Telegram cancelled this login.** {}\n\n"
+                "A Telegram authorization key may only be used from one place "
+                "at a time. Running the copier here and on a server with the "
+                "same login invalidates both.\n\n"
+                "Sign in again below for this machine. For a remote host, "
+                "create its own separate login with "
+                "`./.venv/bin/python tools/make_secrets.py` — and run the "
+                "copier in only one place, or the same signal is traded twice."
+                .format(status.get("error", ""))
+            )
         if status.get("authorized"):
             st.success("Signed in as {}".format(status.get("user", "?")))
             if st.button("Log out of Telegram"):
